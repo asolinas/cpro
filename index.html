@@ -6,34 +6,33 @@
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.4/dist/tailwind.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-100 p-6">
+<div class="max-w-3xl mx-auto">
+  <h1 class="text-3xl font-bold mb-4">Mini File Manager</h1>
 
-  <div class="max-w-3xl mx-auto">
-    <h1 class="text-3xl font-bold mb-4">Mini File Manager</h1>
-
-    <div class="bg-white p-4 rounded shadow mb-6">
-      <h2 class="text-xl font-semibold mb-2">Carica file</h2>
-      <form id="uploadForm" class="flex gap-4 items-center">
-        <input type="file" name="file" required class="border p-2 rounded" />
-        <button class="bg-blue-600 text-white px-4 py-2 rounded">Carica</button>
-      </form>
-    </div>
-
-    <div class="bg-white p-4 rounded shadow mb-6">
-      <h2 class="text-xl font-semibold mb-2">Ricerca</h2>
-      <input id="search" type="text" placeholder="cerca per nome" class="border p-2 rounded w-full" />
-    </div>
-
-    <div id="files" class="space-y-3"></div>
+  <div class="bg-white p-4 rounded shadow mb-6">
+    <h2 class="text-xl font-semibold mb-2">Carica file</h2>
+    <form id="uploadForm" enctype="multipart/form-data" class="flex gap-4 items-center">
+      <input type="file" name="file" required class="border p-2 rounded" />
+      <button class="bg-blue-600 text-white px-4 py-2 rounded">Carica</button>
+    </form>
   </div>
 
-  <!-- Preview Modal -->
-  <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
-    <div class="bg-white p-6 rounded shadow max-w-xl w-full">
-      <h2 id="modal-title" class="text-lg font-bold mb-4"></h2>
-      <pre id="modal-content" class="bg-gray-100 p-4 rounded overflow-auto max-h-80"></pre>
-      <button onclick="closeModal()" class="mt-4 bg-red-500 text-white px-4 py-2 rounded">Chiudi</button>
-    </div>
+  <div class="bg-white p-4 rounded shadow mb-6">
+    <h2 class="text-xl font-semibold mb-2">Ricerca</h2>
+    <input id="search" type="text" placeholder="cerca per nome" class="border p-2 rounded w-full" />
   </div>
+
+  <div id="files" class="space-y-3"></div>
+</div>
+
+<!-- Modal -->
+<div id="modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+  <div class="bg-white p-6 rounded shadow max-w-xl w-full">
+    <h2 id="modal-title" class="text-lg font-bold mb-4"></h2>
+    <pre id="modal-content" class="bg-gray-100 p-4 rounded overflow-auto max-h-80"></pre>
+    <button onclick="closeModal()" class="mt-4 bg-red-500 text-white px-4 py-2 rounded">Chiudi</button>
+  </div>
+</div>
 
 <script>
 const filesDiv = document.getElementById("files");
@@ -43,7 +42,7 @@ const modal = document.getElementById("modal");
 function closeModal() { modal.classList.add("hidden"); }
 
 async function previewFile(name) {
-  const res = await fetch(`/.netlify/blobs/${name}`);
+  const res = await fetch(`/.netlify/blobs/files/${name}`);
   const text = await res.text();
   document.getElementById("modal-title").textContent = name;
   document.getElementById("modal-content").textContent = text.slice(0, 30000);
@@ -55,7 +54,7 @@ async function loadFiles() {
   const res = await fetch(`/.netlify/functions/list?q=${encodeURIComponent(q)}`);
   const list = await res.json();
 
-  filesDiv.innerHTML = list.map(f => `
+  filesDiv.innerHTML = Array.isArray(list) ? list.map(f => `
     <div class="bg-white p-4 rounded shadow flex justify-between items-center">
       <div>
         <strong>${f.name}</strong>
@@ -63,10 +62,10 @@ async function loadFiles() {
       </div>
       <div class="flex gap-2">
         <button onclick="previewFile('${f.name}')" class="bg-gray-700 text-white px-3 py-1 rounded">Preview</button>
-        <a href="/.netlify/blobs/${f.name}" target="_blank" class="bg-blue-600 text-white px-3 py-1 rounded">Apri</a>
+        <a href="/.netlify/blobs/files/${f.name}" target="_blank" class="bg-blue-600 text-white px-3 py-1 rounded">Apri</a>
       </div>
     </div>
-  `).join("");
+  `).join("") : "<p>Errore caricamento lista.</p>";
 }
 
 document.getElementById("uploadForm").addEventListener("submit", async (e) => {
@@ -78,10 +77,8 @@ document.getElementById("uploadForm").addEventListener("submit", async (e) => {
 });
 
 searchInput.addEventListener("input", loadFiles);
-
 loadFiles();
 </script>
-
 
 </body>
 </html>
