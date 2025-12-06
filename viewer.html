@@ -56,7 +56,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // FILENAME FROM URL
 const filename = new URLSearchParams(location.search).get("file");
 
-// ORIGINAL TEXT BACKUP
+// ORIGINAL TEXT, which will be updated after each transpose
 let originalText = "";
 
 
@@ -96,7 +96,7 @@ async function loadSong() {
 }
 
 
-// --- MAIN RENDER FUNCTION ---
+// --- RENDERING CORE ---
 function renderSong(text) {
     parseMetadata(text);
 
@@ -106,7 +106,7 @@ function renderSong(text) {
 
     for (let line of lines) {
 
-        // Skip Title / Subtitle lines entirely
+        // Skip Title and Subtitle
         if (
             line.match(/^Title:/i) ||
             line.match(/^Subtitle:/i) ||
@@ -117,13 +117,13 @@ function renderSong(text) {
         // Extract chords
         const chords = [...line.matchAll(/\[([^\]]+)\]/g)];
 
-        // Remove chords from text
+        // Remove chords from text line
         const textOnly = line.replace(/\[[^\]]+\]/g, "");
 
         const lineDiv = document.createElement("div");
         lineDiv.className = "song-line";
 
-        // CHORD LINE
+        // CHORD LINE (aligned)
         if (chords.length > 0) {
             let chordLine = "";
             let pos = 0;
@@ -150,32 +150,34 @@ function renderSong(text) {
 }
 
 
-// --- TRANSPOSE FUNCTION ---
+// --- TRANSPOSE ACCUMULATED ---
 function transpose(semitones) {
 
     function shift(note) {
         const scale = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-        let base = note.match(/[A-G][#b]?/);
+        let root = note.match(/[A-G][#b]?/);
 
-        if (!base) return note;
+        if (!root) return note;
 
-        let index = scale.indexOf(base[0]);
+        let index = scale.indexOf(root[0]);
         if (index === -1) return note;
 
         let newIndex = (index + semitones + 12) % 12;
-        return note.replace(base[0], scale[newIndex]);
+        return note.replace(root[0], scale[newIndex]);
     }
 
     const newText = originalText.replace(/\[([^\]]+)\]/g, (m, chord) => {
-        const parts = chord.split(/(\s+)/);
-        return "[" + parts.map(shift).join("") + "]";
+        return "[" + chord.replace(/[A-G][#b]?/g, c => shift(c)) + "]";
     });
+
+    // 🔥 FIX: update the base text so multiple transpositions accumulate
+    originalText = newText;
 
     renderSong(newText);
 }
 
 
-// --- FONT SIZE CONTROL ---
+// --- FONT RESIZE ---
 function resize(delta) {
     document.querySelectorAll(".text-line, .chord-line").forEach(el => {
         const size = parseFloat(window.getComputedStyle(el).fontSize);
@@ -183,6 +185,8 @@ function resize(delta) {
     });
 }
 
+
+// LOAD SONG INIT
 loadSong();
 </script>
 
