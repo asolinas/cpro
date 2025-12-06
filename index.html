@@ -3,34 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <title>Supabase File Manager</title>
-
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.4/dist/tailwind.min.css" rel="stylesheet">
 </head>
 
 <body class="bg-gray-100 p-6">
-
 <div class="max-w-3xl mx-auto">
+
   <h1 class="text-3xl font-bold mb-4">File Manager (Supabase)</h1>
 
-  <!-- Upload -->
   <div class="bg-white p-4 rounded shadow mb-6">
     <h2 class="text-xl mb-2 font-semibold">Carica file</h2>
     <input type="file" id="fileInput" class="border p-2 rounded" />
     <button id="uploadBtn" class="bg-blue-600 text-white px-4 py-2 rounded ml-2">Carica</button>
   </div>
 
-  <!-- Search -->
   <div class="bg-white p-4 rounded shadow mb-6">
     <h2 class="text-xl font-semibold mb-2">Ricerca</h2>
     <input id="search" type="text" placeholder="cerca per nome…" class="border p-2 rounded w-full" />
   </div>
 
-  <!-- File list -->
   <div id="files" class="space-y-3"></div>
 </div>
 
-<!-- Modal -->
 <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
   <div class="bg-white p-6 rounded shadow max-w-xl w-full">
     <h2 id="modal-title" class="text-lg font-bold mb-4"></h2>
@@ -71,9 +66,14 @@ async function loadFiles() {
 }
 
 async function preview(name) {
-  const { data } = await supabaseClient.storage.from(BUCKET).download(name);
-  const text = await data.text();
+  const { data, error } = await supabaseClient.storage.from(BUCKET).download(name);
 
+  if (error) {
+    alert("Errore download: " + error.message);
+    return;
+  }
+
+  const text = await data.text();
   document.getElementById("modal-title").textContent = name;
   document.getElementById("modal-content").textContent = text;
   document.getElementById("modal").classList.remove("hidden");
@@ -88,7 +88,17 @@ document.getElementById("uploadBtn").onclick = async () => {
   if (!fileInput.files.length) return;
 
   const file = fileInput.files[0];
-  await supabaseClient.storage.from(BUCKET).upload(file.name, file, { upsert: true });
+
+  const { error } = await supabaseClient.storage.from(BUCKET).upload(file.name, file, {
+    cacheControl: "3600",
+    upsert: true,
+    contentType: file.type || "text/plain"
+  });
+
+  if (error) {
+    alert("Errore upload: " + error.message);
+    return;
+  }
 
   fileInput.value = "";
   loadFiles();
