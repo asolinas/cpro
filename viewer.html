@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<title>ChoPro Viewer</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+body {
+  background: #fff;
+  font-family: "Segoe UI", sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+#toolbar {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: #f7f7f7;
+  border-bottom: 1px solid #ddd;
+  position: sticky;
+  top: 0;
+}
+
+button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+button:hover {
+  background: #e9e9e9;
+}
+
+#content {
+  padding: 20px;
+  white-space: pre-wrap;
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.chord {
+  color: #0D47A1;
+  font-weight: bold;
+}
+</style>
+</head>
+
+<body>
+
+<div id="toolbar">
+  <button onclick="transpose(-1)">Trasponi -</button>
+  <button onclick="transpose(1)">Trasponi +</button>
+
+  <button onclick="resize(-1)">Font -</button>
+  <button onclick="resize(1)">Font +</button>
+
+  <button onclick="toggleChords()">Accordi sopra / inline</button>
+</div>
+
+<pre id="content"></pre>
+
+<script>
+const SUPABASE_URL = "https://xqrhpgrznrmewtgxxngu.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxcmhwZ3J6bnJtZXd0Z3h4bmd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwMjcyNzUsImV4cCI6MjA4MDYwMzI3NX0.jQNuHTWj4bu4Ji_2ALFzB9Tulf_tM9A1tXBEUVzuaKc";
+const BUCKET = "files";
+
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const params = new URLSearchParams(location.search);
+const filename = params.get("file");
+let originalText = "";
+let showChordsAbove = false;
+
+async function loadSong() {
+  const { data, error } = await supabaseClient.storage.from(BUCKET).download(filename);
+  if (error) return alert("Errore nel caricamento: " + error.message);
+
+  originalText = await data.text();
+  renderSong(originalText);
+}
+
+function renderSong(txt) {
+  if (showChordsAbove) txt = chordsAbove(txt);
+  txt = colorize(txt);
+  document.getElementById("content").innerHTML = txt;
+}
+
+function colorize(txt) {
+  return txt.replace(/\[([^\]]+)\]/g, `<span class="chord">[$1]</span>`);
+}
+
+function chordsAbove(txt) {
+  return txt.split("\n").map(line => {
+    const chords = [...line.matchAll(/\[([^\]]+)\]/g)].map(m => m[1]);
+    if (chords.length === 0) return line;
+
+    let chordLine = "";
+    let pos = 0;
+
+    line.replace(/\[([^\]]+)\]/g, (match, chord, offset) => {
+      chordLine += " ".repeat(offset - pos) + chord;
+      pos = offset;
+    });
+
+    return chordLine + "\n" + line;
+  }).join("\n");
+}
+
+function transpose(semitones) {
+  originalText = originalText.replace(/\[([^\]]+)\]/g, (m, chord) => {
+    return "[" + transposeChord(chord, semitones) + "]";
+  });
+  renderSong(originalText);
+}
+
+function transposeChord(chord, semitones) {
+  const scale = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  const flatMap = { "Db":"C#", "Eb":"D#", "Gb":"F#", "Ab":"G#", "Bb":"A#" };
+
+  chord = chord.replace(/([A-G][b#]?)/g, root => {
+    let note = root.replace(/b/, m => ({b:"#"}[m]));
+    note = flatMap[note] || note;
+    let idx = scale.indexOf(note);
+    idx = (idx + semitones + 12) % 12;
+    return scale[idx];
+  });
+
+  return chord;
+}
+
+function resize(delta) {
+  const content = document.getElementById("content");
+  const size = parseInt(window.getComputedStyle(content).fontSize);
+  content.style.fontSize = (size + delta) + "px";
+}
+
+function toggleChords() {
+  showChordsAbove = !showChordsAbove;
+  renderSong(originalText);
+}
+
+loadSong();
+</script>
+
+</body>
+</html>

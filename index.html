@@ -8,8 +8,8 @@
 </head>
 
 <body class="bg-gray-100 p-6">
-<div class="max-w-3xl mx-auto">
 
+<div class="max-w-3xl mx-auto">
   <h1 class="text-3xl font-bold mb-4">File Manager (Supabase)</h1>
 
   <div class="bg-white p-4 rounded shadow mb-6">
@@ -26,21 +26,12 @@
   <div id="files" class="space-y-3"></div>
 </div>
 
-<div id="modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
-  <div class="bg-white p-6 rounded shadow max-w-xl w-full">
-    <h2 id="modal-title" class="text-lg font-bold mb-4"></h2>
-    <pre id="modal-content" class="bg-gray-100 p-4 rounded max-h-96 overflow-auto"></pre>
-    <button onclick="closeModal()" class="mt-3 bg-red-500 text-white px-4 py-2 rounded">Chiudi</button>
-  </div>
-</div>
-
 <script>
 const SUPABASE_URL = "https://xqrhpgrznrmewtgxxngu.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxcmhwZ3J6bnJtZXd0Z3h4bmd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwMjcyNzUsImV4cCI6MjA4MDYwMzI3NX0.jQNuHTWj4bu4Ji_2ALFzB9Tulf_tM9A1tXBEUVzuaKc";
 const BUCKET = "files";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
 const filesDiv = document.getElementById("files");
 const searchInput = document.getElementById("search");
 
@@ -55,32 +46,11 @@ async function loadFiles() {
     <div class="bg-white p-4 rounded shadow flex justify-between items-center">
       <div><strong>${f.name}</strong></div>
       <div class="flex gap-2">
-        <button onclick="preview('${f.name}')" class="bg-gray-700 text-white px-3 py-1 rounded">Preview</button>
-        <a class="bg-blue-600 text-white px-3 py-1 rounded" target="_blank"
-           href="${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${f.name}">
-           Apri
-        </a>
+        <button onclick="window.open('viewer.html?file=${f.name}','_blank')" 
+            class="bg-blue-600 text-white px-3 py-1 rounded">View</button>
       </div>
     </div>
   `).join("");
-}
-
-async function preview(name) {
-  const { data, error } = await supabaseClient.storage.from(BUCKET).download(name);
-
-  if (error) {
-    alert("Errore download: " + error.message);
-    return;
-  }
-
-  const text = await data.text();
-  document.getElementById("modal-title").textContent = name;
-  document.getElementById("modal-content").textContent = text;
-  document.getElementById("modal").classList.remove("hidden");
-}
-
-function closeModal() {
-  document.getElementById("modal").classList.add("hidden");
 }
 
 document.getElementById("uploadBtn").onclick = async () => {
@@ -105,7 +75,6 @@ document.getElementById("uploadBtn").onclick = async () => {
 };
 
 searchInput.addEventListener("input", loadFiles);
-
 loadFiles();
 </script>
 
