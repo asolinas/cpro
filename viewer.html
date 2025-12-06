@@ -37,16 +37,33 @@ button:hover {
   background: #e9e9e9;
 }
 
-#content {
-  padding: 20px;
-  white-space: pre-wrap;
-  font-size: 18px;
-  line-height: 1.6;
+#title {
+  font-size: 36px;
+  font-weight: bold;
+  text-align: center;
+  margin-top: 20px;
 }
 
-.chord {
+#subtitle {
+  font-size: 22px;
+  color: #666;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.song-line {
+  margin-bottom: 18px;
+}
+
+.chord-line {
   color: #0D47A1;
   font-weight: bold;
+  white-space: pre;
+}
+
+.text-line {
+  white-space: pre;
+  font-size: 20px;
 }
 </style>
 </head>
@@ -59,22 +76,24 @@ button:hover {
 
   <button onclick="resize(-1)">Font -</button>
   <button onclick="resize(1)">Font +</button>
-
-  <button onclick="toggleChords()">Accordi sopra / inline</button>
 </div>
 
-<pre id="content"></pre>
+<div id="title"></div>
+<div id="subtitle"></div>
+
+<div id="content"></div>
 
 <script>
 const SUPABASE_URL = "https://xqrhpgrznrmewtgxxngu.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxcmhwZ3J6bnJtZXd0Z3h4bmd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwMjcyNzUsImV4cCI6MjA4MDYwMzI3NX0.jQNuHTWj4bu4Ji_2ALFzB9Tulf_tM9A1tXBEUVzuaKc";
+const SUPABASE_ANON_KEY =
+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxcmhwZ3J6bnJtZXd0Z3h4bmd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwMjcyNzUsImV4cCI6MjA4MDYwMzI3NX0.jQNuHTWj4bu4Ji_2ALFzB9Tulf_tM9A1tXBEUVzuaKc";
 const BUCKET = "files";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const params = new URLSearchParams(location.search);
 const filename = params.get("file");
+
 let originalText = "";
-let showChordsAbove = false;
 
 async function loadSong() {
   const { data, error } = await supabaseClient.storage.from(BUCKET).download(filename);
@@ -84,64 +103,86 @@ async function loadSong() {
   renderSong(originalText);
 }
 
+function parseMetadata(text) {
+  let title = "";
+  let subtitle = "";
+
+  const m1 = text.match(/Title:\s*(.*)/i);
+  if (m1) title = m1[1].trim();
+
+  const m2 = text.match(/Subtitle:\s*(.*)/i);
+  if (m2) subtitle = m2[1].trim();
+
+  document.getElementById("title").textContent = title || "";
+  document.getElementById("subtitle").textContent = subtitle || "";
+}
+
 function renderSong(txt) {
-  if (showChordsAbove) txt = chordsAbove(txt);
-  txt = colorize(txt);
-  document.getElementById("content").innerHTML = txt;
-}
+  parseMetadata(txt);
 
-function colorize(txt) {
-  return txt.replace(/\[([^\]]+)\]/g, `<span class="chord">[$1]</span>`);
-}
+  const lines = txt.split("\n");
+  const container = document.getElementById("content");
+  container.innerHTML = "";
 
-function chordsAbove(txt) {
-  return txt.split("\n").map(line => {
-    const chords = [...line.matchAll(/\[([^\]]+)\]/g)].map(m => m[1]);
-    if (chords.length === 0) return line;
+  for (let line of lines) {
+    if (line.startsWith("Title:") || line.startsWith("Subtitle:")) continue;
 
-    let chordLine = "";
-    let pos = 0;
+    const chords = [...line.matchAll(/\[([^\]]+)\]/g)];
+    const textOnly = line.replace(/\[[^\]]+\]/g, "");
 
-    line.replace(/\[([^\]]+)\]/g, (match, chord, offset) => {
-      chordLine += " ".repeat(offset - pos) + chord;
-      pos = offset;
-    });
+    const lineDiv = document.createElement("div");
+    lineDiv.className = "song-line";
 
-    return chordLine + "\n" + line;
-  }).join("\n");
+    if (chords.length > 0) {
+      let chordLine = "";
+      let pos = 0;
+
+      line.replace(/\[([^\]]+)\]/g, (m, chord, offset) => {
+        chordLine += " ".repeat(offset - pos) + chord;
+        pos = offset;
+      });
+
+      const chordEl = document.createElement("div");
+      chordEl.className = "chord-line";
+      chordEl.textContent = chordLine;
+      lineDiv.appendChild(chordEl);
+    }
+
+    const textEl = document.createElement("div");
+    textEl.className = "text-line";
+    textEl.textContent = textOnly;
+    lineDiv.appendChild(textEl);
+
+    container.appendChild(lineDiv);
+  }
 }
 
 function transpose(semitones) {
-  originalText = originalText.replace(/\[([^\]]+)\]/g, (m, chord) => {
-    return "[" + transposeChord(chord, semitones) + "]";
-  });
+  function transposeChord(chord, semitones) {
+    const scale = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+    const flatMap = { "Db":"C#", "Eb":"D#", "Gb":"F#", "Ab":"G#", "Bb":"A#" };
+
+    chord = chord.replace(/([A-G][b#]?)/g, root => {
+      let note = root.replace(/b/, "#");
+      note = flatMap[note] || note;
+      let idx = scale.indexOf(note);
+      idx = (idx + semitones + 12) % 12;
+      return scale[idx];
+    });
+
+    return chord;
+  }
+
+  originalText = originalText.replace(/\[([^\]]+)\]/g, (m, chord) =>
+    "[" + transposeChord(chord, semitones) + "]"
+  );
   renderSong(originalText);
-}
-
-function transposeChord(chord, semitones) {
-  const scale = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-  const flatMap = { "Db":"C#", "Eb":"D#", "Gb":"F#", "Ab":"G#", "Bb":"A#" };
-
-  chord = chord.replace(/([A-G][b#]?)/g, root => {
-    let note = root.replace(/b/, m => ({b:"#"}[m]));
-    note = flatMap[note] || note;
-    let idx = scale.indexOf(note);
-    idx = (idx + semitones + 12) % 12;
-    return scale[idx];
-  });
-
-  return chord;
 }
 
 function resize(delta) {
   const content = document.getElementById("content");
   const size = parseInt(window.getComputedStyle(content).fontSize);
   content.style.fontSize = (size + delta) + "px";
-}
-
-function toggleChords() {
-  showChordsAbove = !showChordsAbove;
-  renderSong(originalText);
 }
 
 loadSong();

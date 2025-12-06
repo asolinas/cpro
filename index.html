@@ -28,7 +28,8 @@
 
 <script>
 const SUPABASE_URL = "https://xqrhpgrznrmewtgxxngu.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxcmhwZ3J6bnJtZXd0Z3h4bmd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwMjcyNzUsImV4cCI6MjA4MDYwMzI3NX0.jQNuHTWj4bu4Ji_2ALFzB9Tulf_tM9A1tXBEUVzuaKc";
+const SUPABASE_ANON_KEY =
+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxcmhwZ3J6bnJtZXd0Z3h4bmd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwMjcyNzUsImV4cCI6MjA4MDYwMzI3NX0.jQNuHTWj4bu4Ji_2ALFzB9Tulf_tM9A1tXBEUVzuaKc";
 const BUCKET = "files";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -46,7 +47,7 @@ async function loadFiles() {
     <div class="bg-white p-4 rounded shadow flex justify-between items-center">
       <div><strong>${f.name}</strong></div>
       <div class="flex gap-2">
-        <button onclick="window.open('viewer.html?file=${f.name}','_blank')" 
+        <button onclick="window.open('viewer.html?file=${f.name}', '_blank')" 
             class="bg-blue-600 text-white px-3 py-1 rounded">View</button>
       </div>
     </div>
