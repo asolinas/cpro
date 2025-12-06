@@ -1,4 +1,4 @@
-export default async (req) => {
+export default async (req) =>  {
   try {
     const token = process.env.NETLIFY_API_TOKEN;
     const site = process.env.NETLIFY_SITE_ID;
