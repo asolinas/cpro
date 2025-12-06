@@ -1,17 +1,14 @@
-import { blobs } from "@netlify/blobs";
+export default async () => {
+  const site = process.env.NETLIFY_SITE_ID;
+  const token = process.env.NETLIFY_API_TOKEN;
 
-export default async (req) => {
-  const url = new URL(req.url);
-  const q = (url.searchParams.get("q") || "").toLowerCase();
+  const catalogUrl = `https://api.netlify.com/api/v1/sites/${site}/blobs/metadata/catalog.json`;
 
-  const metaStore = blobs({ namespace: "metadata" });
-  const catalog = await metaStore.get("catalog.json", { type: "json" }) || [];
+  let catalog = [];
+  let res = await fetch(catalogUrl, { headers: { "Authorization": `Bearer ${token}` } });
+  if (res.ok) catalog = await res.json();
 
-  const results = catalog.filter(entry =>
-    entry.name.toLowerCase().includes(q)
-  );
-
-  return new Response(JSON.stringify(results), {
+  return new Response(JSON.stringify(catalog), {
     headers: { "Content-Type": "application/json" }
   });
 };

@@ -1,5 +1,0 @@
-{
-  "imports": {
-    "@netlify/blobs": "npm:@netlify/blobs"
-  }
-}
