@@ -1,2 +1,1 @@
-# Canzoniere PRO
-Insert files accordingly.
+Upload your final index.html, viewer.html, and styles.css here. PNG icons included.
