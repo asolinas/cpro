@@ -1,1 +1,190 @@
-<html><body><h1>Viewer placeholder - insert full version</h1></body></html>
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<title>Viewer Canzoniere</title>
+
+<!-- Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<!-- CSS -->
+<link rel="stylesheet" href="styles.css" />
+
+<style>
+#content {
+  padding: 20px;
+}
+</style>
+</head>
+
+<body>
+
+<!-- TOOLBAR -->
+<div id="toolbar">
+  <button class="toolbar-btn" onclick="transpose(-1)" title="Trasponi -">
+    <img src="assets/icons/transpose_minus.png" class="icon">
+  </button>
+
+  <button class="toolbar-btn" onclick="transpose(1)" title="Trasponi +">
+    <img src="assets/icons/transpose_plus.png" class="icon">
+  </button>
+
+  <button class="toolbar-btn" onclick="resize(-1)" title="Font -">
+    <img src="assets/icons/font_minus.png" class="icon">
+  </button>
+
+  <button class="toolbar-btn" onclick="resize(1)" title="Font +">
+    <img src="assets/icons/font_plus.png" class="icon">
+  </button>
+</div>
+
+<!-- TITLES -->
+<h1 id="title"></h1>
+<h2 id="subtitle"></h2>
+
+<div id="content"></div>
+
+<script>
+// CONFIG
+const SUPABASE_URL = "https://xqrhpgrznrmewtgxxngu.supabase.co";
+const SUPABASE_ANON_KEY =
+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxcmhwZ3J6bnJtZXd0Z3h4bmd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwMjcyNzUsImV4cCI6MjA4MDYwMzI3NX0.jQNuHTWj4bu4Ji_2ALFzB9Tulf_tM9A1tXBEUVzuaKc";
+const BUCKET = "files";
+
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// FILENAME FROM URL
+const filename = new URLSearchParams(location.search).get("file");
+
+// ORIGINAL TEXT BACKUP
+let originalText = "";
+
+
+// --- METADATA EXTRACTION ---
+function parseMetadata(text) {
+    let title = "";
+    let subtitle = "";
+
+    let m1 = text.match(/^Title:\s*(.*)$/mi);
+    if (m1) title = m1[1].trim();
+
+    let m2 = text.match(/^Subtitle:\s*(.*)$/mi);
+    if (m2) subtitle = m2[1].trim();
+
+    let g1 = text.match(/^\{title:\s*(.*?)\}$/mi);
+    if (g1) title = g1[1].trim();
+
+    let g2 = text.match(/^\{subtitle:\s*(.*?)\}$/mi);
+    if (g2) subtitle = g2[1].trim();
+
+    document.getElementById("title").textContent = title;
+    document.getElementById("subtitle").textContent = subtitle;
+}
+
+
+// --- LOAD FILE FROM SUPABASE ---
+async function loadSong() {
+
+    const { data, error } = await supabaseClient.storage.from(BUCKET).download(filename);
+    if (error) {
+        alert("Errore caricamento file: " + error.message);
+        return;
+    }
+
+    originalText = await data.text();
+    renderSong(originalText);
+}
+
+
+// --- MAIN RENDER FUNCTION ---
+function renderSong(text) {
+    parseMetadata(text);
+
+    const lines = text.split("\n");
+    const container = document.getElementById("content");
+    container.innerHTML = "";
+
+    for (let line of lines) {
+
+        // Skip Title / Subtitle lines entirely
+        if (
+            line.match(/^Title:/i) ||
+            line.match(/^Subtitle:/i) ||
+            line.match(/^\{title:/i) ||
+            line.match(/^\{subtitle:/i)
+        ) continue;
+
+        // Extract chords
+        const chords = [...line.matchAll(/\[([^\]]+)\]/g)];
+
+        // Remove chords from text
+        const textOnly = line.replace(/\[[^\]]+\]/g, "");
+
+        const lineDiv = document.createElement("div");
+        lineDiv.className = "song-line";
+
+        // CHORD LINE
+        if (chords.length > 0) {
+            let chordLine = "";
+            let pos = 0;
+
+            line.replace(/\[([^\]]+)\]/g, (m, chord, offset) => {
+                chordLine += " ".repeat(offset - pos) + chord;
+                pos = offset;
+            });
+
+            const chordEl = document.createElement("div");
+            chordEl.className = "chord-line";
+            chordEl.textContent = chordLine;
+            lineDiv.appendChild(chordEl);
+        }
+
+        // TEXT LINE
+        const textEl = document.createElement("div");
+        textEl.className = "text-line";
+        textEl.textContent = textOnly;
+        lineDiv.appendChild(textEl);
+
+        container.appendChild(lineDiv);
+    }
+}
+
+
+// --- TRANSPOSE FUNCTION ---
+function transpose(semitones) {
+
+    function shift(note) {
+        const scale = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+        let base = note.match(/[A-G][#b]?/);
+
+        if (!base) return note;
+
+        let index = scale.indexOf(base[0]);
+        if (index === -1) return note;
+
+        let newIndex = (index + semitones + 12) % 12;
+        return note.replace(base[0], scale[newIndex]);
+    }
+
+    const newText = originalText.replace(/\[([^\]]+)\]/g, (m, chord) => {
+        const parts = chord.split(/(\s+)/);
+        return "[" + parts.map(shift).join("") + "]";
+    });
+
+    renderSong(newText);
+}
+
+
+// --- FONT SIZE CONTROL ---
+function resize(delta) {
+    document.querySelectorAll(".text-line, .chord-line").forEach(el => {
+        const size = parseFloat(window.getComputedStyle(el).fontSize);
+        el.style.fontSize = (size + delta) + "px";
+    });
+}
+
+loadSong();
+</script>
+
+</body>
+</html>
