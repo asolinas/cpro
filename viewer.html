@@ -68,24 +68,32 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // FILENAME FROM URL
 const filename = new URLSearchParams(location.search).get("file");
 
-// ORIGINAL TEXT (updated after every transpose or notation toggle)
+// ORIGINAL TEXT, updated on transpose and toggleNotation
 let originalText = "";
 
-// Notation Toggle
-let notation = "EN"; 
+// Current notation state
+let notation = "EN";
+
+
+// ===========================
+// NOTATION TABLES (MAIUSCOLE)
+// ===========================
 
 const EN_TO_IT = {
-    "C":"Do","C#":"Do#","D":"Re","D#":"Re#","E":"Mi","F":"Fa","F#":"Fa#",
-    "G":"Sol","G#":"Sol#","A":"La","A#":"La#","B":"Si"
+    "C":"DO","C#":"DO#","D":"RE","D#":"RE#","E":"MI","F":"FA","F#":"FA#",
+    "G":"SOL","G#":"SOL#","A":"LA","A#":"LA#","B":"SI"
 };
 
 const IT_TO_EN = {
-    "Do":"C","Do#":"C#","Re":"D","Re#":"D#","Mi":"E","Fa":"F","Fa#":"F#",
-    "Sol":"G","Sol#":"G#","La":"A","La#":"A#","Si":"B"
+    "DO":"C","DO#":"C#","RE":"D","RE#":"D#","MI":"E","FA":"F","FA#":"F#",
+    "SOL":"G","SOL#":"G#","LA":"A","LA#":"A#","SI":"B"
 };
 
 
-// --- METADATA EXTRACTION ---
+// ===========================
+// METADATA EXTRACTION
+// ===========================
+
 function parseMetadata(text) {
     let title = "";
     let subtitle = "";
@@ -96,18 +104,21 @@ function parseMetadata(text) {
     let m2 = text.match(/^Subtitle:\s*(.*)$/mi);
     if (m2) subtitle = m2[1].trim();
 
-    let g1 = text.match(/^\{title:\s*(.*?)\}$/mi);
-    if (g1) title = g1[1].trim();
+    let s1 = text.match(/^\{subtitle:\s*(.*?)\}$/mi);
+    if (s1) subtitle = s1[1].trim();
 
-    let g2 = text.match(/^\{subtitle:\s*(.*?)\}$/mi);
-    if (g2) subtitle = g2[1].trim();
+    let s2 = text.match(/^\{st:\s*(.*?)\}$/mi);
+    if (s2) subtitle = s2[1].trim();
 
     document.getElementById("title").textContent = title;
     document.getElementById("subtitle").textContent = subtitle;
 }
 
 
-// --- LOAD FILE FROM SUPABASE ---
+// ===========================
+// LOAD FILE FROM SUPABASE
+// ===========================
+
 async function loadSong() {
 
     const { data, error } = await supabaseClient.storage.from(BUCKET).download(filename);
@@ -121,7 +132,10 @@ async function loadSong() {
 }
 
 
-// --- RENDER SONG ---
+// ===========================
+// RENDER SONG
+// ===========================
+
 function renderSong(text) {
     parseMetadata(text);
 
@@ -136,7 +150,8 @@ function renderSong(text) {
             line.match(/^Title:/i) ||
             line.match(/^Subtitle:/i) ||
             line.match(/^\{title:/i) ||
-            line.match(/^\{subtitle:/i)
+            line.match(/^\{subtitle:/i) ||
+            line.match(/^\{st:/i)
         ) continue;
 
         const chords = [...line.matchAll(/\[([^\]]+)\]/g)];
@@ -170,7 +185,10 @@ function renderSong(text) {
 }
 
 
-// --- TRANSPOSE ACCUMULATED ---
+// ===========================
+// TRANSPOSE ACCUMULATO
+// ===========================
+
 function transpose(semitones) {
 
     function shift(note) {
@@ -187,24 +205,29 @@ function transpose(semitones) {
     }
 
     const newText = originalText.replace(/\[([^\]]+)\]/g, (m, chord) => {
-        return "[" + chord.replace(/[A-G][#b]?/g, c => shift(c)) + "]";
+        return "[" + chord.replace(/[A-G]#?/g, c => shift(c)) + "]";
     });
 
     originalText = newText;
-
     renderSong(newText);
 }
 
 
+// ===========================
+// TOGGLE EN ⇄ ITA
+// ===========================
 
-// --- NOTATION TOGGLE EN ⇄ ITA ---
 function toggleNotation() {
 
     notation = (notation === "EN") ? "IT" : "EN";
     const map = (notation === "EN") ? IT_TO_EN : EN_TO_IT;
 
     const converted = originalText.replace(/\[([^\]]+)\]/g, (m, chord) => {
-        return "[" + chord.replace(/[A-Za-z#]+/g, c => map[c] || c) + "]";
+
+        // Match chords like: DO#, RE, SOL, LA, MI, FA#, etc.
+        return "[" + chord.replace(/(DO#?|RE#?|MI|FA#?|SOL#?|LA#?|SI|C#?|D#?|F#?|G#?|A#?|[CDEFGAB])/g,
+            c => map[c] || c
+        ) + "]";
     });
 
     originalText = converted;
@@ -212,8 +235,10 @@ function toggleNotation() {
 }
 
 
+// ===========================
+// FONT RESIZE
+// ===========================
 
-// --- FONT RESIZE ---
 function resize(delta) {
     document.querySelectorAll(".text-line, .chord-line").forEach(el => {
         const size = parseFloat(window.getComputedStyle(el).fontSize);
@@ -222,8 +247,10 @@ function resize(delta) {
 }
 
 
+// ===========================
+// EXPORT PDF
+// ===========================
 
-// --- EXPORT PDF ---
 async function exportPDF() {
     const { jsPDF } = window.jspdf;
 
@@ -241,7 +268,10 @@ async function exportPDF() {
 }
 
 
+// ===========================
 // LOAD SONG INIT
+// ===========================
+
 loadSong();
 </script>
 
