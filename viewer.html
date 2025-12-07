@@ -10,6 +10,10 @@
 <!-- CSS -->
 <link rel="stylesheet" href="styles.css" />
 
+<!-- PDF Export Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
 <style>
 #content {
   padding: 20px;
@@ -36,6 +40,14 @@
   <button class="toolbar-btn" onclick="resize(1)" title="Font +">
     <img src="assets/icons/font_plus.png" class="icon">
   </button>
+
+  <button class="toolbar-btn" onclick="toggleNotation()" title="EN ⇄ ITA">
+    <img src="assets/icons/notation.png" class="icon">
+  </button>
+
+  <button class="toolbar-btn" onclick="exportPDF()" title="Esporta PDF">
+    <img src="assets/icons/pdf.png" class="icon">
+  </button>
 </div>
 
 <!-- TITLES -->
@@ -56,8 +68,21 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // FILENAME FROM URL
 const filename = new URLSearchParams(location.search).get("file");
 
-// ORIGINAL TEXT, which will be updated after each transpose
+// ORIGINAL TEXT (updated after every transpose or notation toggle)
 let originalText = "";
+
+// Notation Toggle
+let notation = "EN"; 
+
+const EN_TO_IT = {
+    "C":"Do","C#":"Do#","D":"Re","D#":"Re#","E":"Mi","F":"Fa","F#":"Fa#",
+    "G":"Sol","G#":"Sol#","A":"La","A#":"La#","B":"Si"
+};
+
+const IT_TO_EN = {
+    "Do":"C","Do#":"C#","Re":"D","Re#":"D#","Mi":"E","Fa":"F","Fa#":"F#",
+    "Sol":"G","Sol#":"G#","La":"A","La#":"A#","Si":"B"
+};
 
 
 // --- METADATA EXTRACTION ---
@@ -96,7 +121,7 @@ async function loadSong() {
 }
 
 
-// --- RENDERING CORE ---
+// --- RENDER SONG ---
 function renderSong(text) {
     parseMetadata(text);
 
@@ -106,7 +131,7 @@ function renderSong(text) {
 
     for (let line of lines) {
 
-        // Skip Title and Subtitle
+        // Skip metadata
         if (
             line.match(/^Title:/i) ||
             line.match(/^Subtitle:/i) ||
@@ -114,16 +139,12 @@ function renderSong(text) {
             line.match(/^\{subtitle:/i)
         ) continue;
 
-        // Extract chords
         const chords = [...line.matchAll(/\[([^\]]+)\]/g)];
-
-        // Remove chords from text line
         const textOnly = line.replace(/\[[^\]]+\]/g, "");
 
         const lineDiv = document.createElement("div");
         lineDiv.className = "song-line";
 
-        // CHORD LINE (aligned)
         if (chords.length > 0) {
             let chordLine = "";
             let pos = 0;
@@ -139,7 +160,6 @@ function renderSong(text) {
             lineDiv.appendChild(chordEl);
         }
 
-        // TEXT LINE
         const textEl = document.createElement("div");
         textEl.className = "text-line";
         textEl.textContent = textOnly;
@@ -170,11 +190,27 @@ function transpose(semitones) {
         return "[" + chord.replace(/[A-G][#b]?/g, c => shift(c)) + "]";
     });
 
-    // 🔥 FIX: update the base text so multiple transpositions accumulate
     originalText = newText;
 
     renderSong(newText);
 }
+
+
+
+// --- NOTATION TOGGLE EN ⇄ ITA ---
+function toggleNotation() {
+
+    notation = (notation === "EN") ? "IT" : "EN";
+    const map = (notation === "EN") ? IT_TO_EN : EN_TO_IT;
+
+    const converted = originalText.replace(/\[([^\]]+)\]/g, (m, chord) => {
+        return "[" + chord.replace(/[A-Za-z#]+/g, c => map[c] || c) + "]";
+    });
+
+    originalText = converted;
+    renderSong(converted);
+}
+
 
 
 // --- FONT RESIZE ---
@@ -183,6 +219,25 @@ function resize(delta) {
         const size = parseFloat(window.getComputedStyle(el).fontSize);
         el.style.fontSize = (size + delta) + "px";
     });
+}
+
+
+
+// --- EXPORT PDF ---
+async function exportPDF() {
+    const { jsPDF } = window.jspdf;
+
+    const viewer = document.body;
+
+    const canvas = await html2canvas(viewer, { scale: 2 });
+    const img = canvas.toDataURL("image/png");
+
+    const pdf = new jsPDF("p", "mm", "a4");
+    const width = pdf.internal.pageSize.getWidth();
+    const height = (canvas.height * width) / canvas.width;
+
+    pdf.addImage(img, "PNG", 0, 0, width, height);
+    pdf.save((document.getElementById("title").textContent || "Canzone") + ".pdf");
 }
 
 
