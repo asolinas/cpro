@@ -7,14 +7,16 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="styles.css" />
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
 <style>
-#content {
-  padding: 20px;
-}
+#content { padding: 20px; }
+.song-line { margin-bottom: 10px; white-space: pre; font-family: monospace; }
+.chord-line { font-weight: bold; color: #444; }
+.text-line { margin-top: -4px; }
+#toolbar { display: flex; gap: 10px; padding: 10px; border-bottom: 1px solid #ccc; }
+.toolbar-btn img { width: 32px; cursor: pointer; }
 </style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 
 <body>
@@ -22,69 +24,63 @@
 <!-- TOOLBAR -->
 <div id="toolbar">
   <button class="toolbar-btn" onclick="transpose(-1)" title="Trasponi -">
-    <img src="assets/icons/transpose_minus.png" class="icon">
+    <img src="assets/icons/transpose_minus.png">
   </button>
 
   <button class="toolbar-btn" onclick="transpose(1)" title="Trasponi +">
-    <img src="assets/icons/transpose_plus.png" class="icon">
+    <img src="assets/icons/transpose_plus.png">
   </button>
 
   <button class="toolbar-btn" onclick="resize(-1)" title="Font -">
-    <img src="assets/icons/font_minus.png" class="icon">
+    <img src="assets/icons/font_minus.png">
   </button>
 
   <button class="toolbar-btn" onclick="resize(1)" title="Font +">
-    <img src="assets/icons/font_plus.png" class="icon">
+    <img src="assets/icons/font_plus.png">
   </button>
 
   <button class="toolbar-btn" onclick="toggleNotation()" title="EN ⇄ ITA">
-    <img src="assets/icons/notation.png" class="icon">
+    <img src="assets/icons/notation.png">
   </button>
 
   <button class="toolbar-btn" onclick="exportPDF()" title="Esporta PDF">
-    <img src="assets/icons/pdf.png" class="icon">
+    <img src="assets/icons/pdf.png">
   </button>
 </div>
 
-<!-- PAGE HEADER -->
 <h1 id="title"></h1>
 <h2 id="subtitle"></h2>
 
-<!-- SONG CONTENT -->
 <div id="content"></div>
 
 <script>
-// ==============================
+// =======================================
 // SUPABASE CONFIG
-// ==============================
+// =======================================
 const SUPABASE_URL = "https://xqrhpgrznrmewtgxxngu.supabase.co";
 const SUPABASE_ANON_KEY =
 "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxcmhwZ3J6bnJtZXd0Z3h4bmd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwMjcyNzUsImV4cCI6MjA4MDYwMzI3NX0.jQNuHTWj4bu4Ji_2ALFzB9Tulf_tM9A1tXBEUVzuaKc";
 
-const BUCKET = "files";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const BUCKET = "files";
 
-// filename
 const filename = new URLSearchParams(location.search).get("file");
 
-// original text after cleaning + transpose + notation toggle
 let originalText = "";
-
-// notation state
 let notation = "EN";
 
 
-// ==============================
-// CLEAN TAGS (rimuove tag inutili)
-// ==============================
+// =======================================
+// CLEAN TAGS ChordPro (font, color, etc.)
+// =======================================
 function cleanTags(text) {
   return text.replace(/\{(font|color|chordChartSize|playtime|chorusindent|chordspace|linespace|transpositionLevel|EditorBack|Background|Highlight)[^}]*\}/gi, "");
 }
 
 
-// ==============================
-// PARSE TITLE + SUBTITLE
-// ==============================
+// =======================================
+// PARSE METADATA (title, subtitle)
+// =======================================
 function parseMetadata(text) {
   let title = "";
   let subtitle = "";
@@ -92,13 +88,12 @@ function parseMetadata(text) {
   const patterns = [
     { regex: /^Title:\s*(.*)$/mi, target: "title" },
     { regex: /^\{title:\s*(.*?)\}$/mi, target: "title" },
-
     { regex: /^Subtitle:\s*(.*)$/mi, target: "subtitle" },
     { regex: /^\{subtitle:\s*(.*?)\}$/mi, target: "subtitle" },
     { regex: /^\{st:\s*(.*?)\}$/mi, target: "subtitle" },
   ];
 
-  for (let p of patterns) {
+  for (const p of patterns) {
     const m = text.match(p.regex);
     if (m) {
       if (p.target === "title") title = m[1].trim();
@@ -113,26 +108,12 @@ function parseMetadata(text) {
 }
 
 
-// ==============================
-// NOTATION MAPS (MAIUSCOLO)
-// ==============================
-const EN_TO_IT = {
-  "C":"DO","C#":"DO#","D":"RE","D#":"RE#","E":"MI","F":"FA","F#":"FA#",
-  "G":"SOL","G#":"SOL#","A":"LA","A#":"LA#","B":"SI"
-};
-
-const IT_TO_EN = {
-  "DO":"C","DO#":"C#","RE":"D","RE#":"D#","MI":"E","FA":"F","FA#":"F#",
-  "SOL":"G","SOL#":"G#","LA":"A","LA#":"A#","SI":"B"
-};
-
-
-// ==============================
+// =======================================
 // LOAD SONG
-// ==============================
+// =======================================
 async function loadSong() {
   const { data, error } = await supabaseClient.storage.from(BUCKET).download(filename);
-  if (error) return alert("Errore: " + error.message);
+  if (error) return alert("Errore caricamento file: " + error.message);
 
   const txt = await data.text();
   originalText = cleanTags(txt);
@@ -141,15 +122,16 @@ async function loadSong() {
 }
 
 
-// ==============================
-// RENDER SONG (accordi sopra)
-// ==============================
+// =======================================
+// RENDER SONG (accordi sopra il testo)
+// =======================================
 function renderSong(text) {
   parseMetadata(text);
 
-  const lines = text.split("\n");
   const container = document.getElementById("content");
   container.innerHTML = "";
+
+  const lines = text.split("\n");
 
   for (let line of lines) {
 
@@ -159,15 +141,15 @@ function renderSong(text) {
     // ignora meta
     if (line.match(/^Title:/i) ||
         line.match(/^Subtitle:/i) ||
-        line.match(/^\{title:/i) ||
         line.match(/^\{subtitle:/i) ||
+        line.match(/^\{title:/i) ||
         line.match(/^\{st:/i)) continue;
 
     const chords = [...line.matchAll(/\[([^\]]+)\]/g)];
     const textOnly = line.replace(/\[[^\]]+\]/g, "");
 
-    const lineDiv = document.createElement("div");
-    lineDiv.className = "song-line";
+    const div = document.createElement("div");
+    div.className = "song-line";
 
     if (chords.length > 0) {
       let chordLine = "";
@@ -181,115 +163,135 @@ function renderSong(text) {
       const chordEl = document.createElement("div");
       chordEl.className = "chord-line";
       chordEl.textContent = chordLine;
-      lineDiv.appendChild(chordEl);
+      div.appendChild(chordEl);
     }
 
     const textEl = document.createElement("div");
     textEl.className = "text-line";
     textEl.textContent = textOnly;
+    div.appendChild(textEl);
 
-    lineDiv.appendChild(textEl);
-    container.appendChild(lineDiv);
+    container.appendChild(div);
   }
 }
 
 
-// ==============================
+// =======================================
 // TRANSPOSE ACCUMULATO
-// ==============================
-function transpose(semitones) {
+// =======================================
+function transpose(n) {
 
   function shift(note) {
     const scale = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-
     let root = note.match(/[A-G]#?/);
     if (!root) return note;
 
-    let index = scale.indexOf(root[0]);
-    if (index === -1) return note;
+    let idx = scale.indexOf(root[0]);
+    if (idx < 0) return note;
 
-    let newIndex = (index + semitones + 12) % 12;
-    return note.replace(root[0], scale[newIndex]);
+    return note.replace(root[0], scale[(idx + n + 12) % 12]);
   }
 
-  const newText =
-    originalText.replace(/\[([^\]]+)\]/g, (m, chord) =>
-      "[" + chord.replace(/[A-G]#?/g, c => shift(c)) + "]"
-    );
-
-  originalText = newText;
-  renderSong(newText);
-}
-
-
-// ==============================
-// TOGGLE EN ⇄ ITA
-// ==============================
-function toggleNotation() {
-  notation = (notation === "EN") ? "IT" : "EN";
-  const map = (notation === "EN") ? IT_TO_EN : EN_TO_IT;
-
-  const converted = originalText.replace(/\[([^\]]+)\]/g, (m, chord) =>
-    "[" +
-      chord.replace(
-        /(DO#?|RE#?|MI|FA#?|SOL#?|LA#?|SI|C#?|D#?|F#?|G#?|A#?|[CDEFGAB])/g,
-        c => map[c] || c
-      )
-    + "]"
+  originalText = originalText.replace(/\[([^\]]+)\]/g,
+    (m, chord) => "[" + chord.replace(/[A-G]#?/g, c => shift(c)) + "]"
   );
 
-  originalText = converted;
-  renderSong(converted);
+  renderSong(originalText);
 }
 
 
-// ==============================
+// =======================================
+// EN ⇄ ITA (MAIUSCOLO)
+// =======================================
+const EN_TO_IT = {
+  "C":"DO","C#":"DO#","D":"RE","D#":"RE#","E":"MI","F":"FA","F#":"FA#",
+  "G":"SOL","G#":"SOL#","A":"LA","A#":"LA#","B":"SI"
+};
+const IT_TO_EN = {
+  "DO":"C","DO#":"C#","RE":"D","RE#":"D#","MI":"E","FA":"F","FA#":"F#",
+  "SOL":"G","SOL#":"G#","LA":"A","LA#":"A#","SI":"B"
+};
+
+function toggleNotation() {
+  notation = notation === "EN" ? "IT" : "EN";
+  const map = notation === "EN" ? IT_TO_EN : EN_TO_IT;
+
+  originalText = originalText.replace(/\[([^\]]+)\]/g, (m, chord) =>
+    "[" + chord.replace(
+      /(DO#?|RE#?|MI|FA#?|SOL#?|LA#?|SI|C#?|D#?|F#?|G#?|A#?|[CDEFGAB])/g,
+      c => map[c] || c
+    ) + "]"
+  );
+
+  renderSong(originalText);
+}
+
+
+// =======================================
 // FONT RESIZE
-// ==============================
-function resize(delta) {
+// =======================================
+function resize(n) {
   document.querySelectorAll(".text-line, .chord-line").forEach(el => {
-    let size = parseFloat(window.getComputedStyle(el).fontSize);
-    el.style.fontSize = (size + delta) + "px";
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    el.style.fontSize = (size + n) + "px";
   });
 }
 
 
-// ==============================
-// EXPORT PDF (SENZA TOOLBAR)
-// ==============================
+// =======================================
+// EXPORT PDF **LEGGERO** (NO TOOLBAR)
+// =======================================
 async function exportPDF() {
   const { jsPDF } = window.jspdf;
-
-  const toolbar = document.getElementById("toolbar");
-  toolbar.style.display = "none";
-
-  await new Promise(r => setTimeout(r, 200));
-
-  const canvas = await html2canvas(document.body, { scale: 2 });
-  const img = canvas.toDataURL("image/png");
-
-  toolbar.style.display = "flex";
-
   const pdf = new jsPDF("p", "mm", "a4");
-  const width = pdf.internal.pageSize.getWidth();
-  const height = (canvas.height * width) / canvas.width;
 
-  pdf.addImage(img, "PNG", 0, 0, width, height);
+  let y = 20;
+
+  // Titolo
+  pdf.setFontSize(20);
+  pdf.text(document.getElementById("title").textContent || "", 10, y);
+  y += 10;
+
+  // Sottotitolo
+  pdf.setFontSize(14);
+  pdf.text(document.getElementById("subtitle").textContent || "", 10, y);
+  y += 12;
+
+  // Corpo testo
+  pdf.setFontSize(11);
+  const lines = originalText.split("\n");
+
+  for (let line of lines) {
+
+    if (line.match(/^\{.*?\}$/)) continue;
+    if (line.match(/^Title:/i) || line.match(/^Subtitle:/i)) continue;
+
+    if (line.includes("[")) {
+      let chords = line.replace(/[^\]]+\]/g, match => match);
+      pdf.text(chords, 10, y);
+      y += 6;
+    }
+
+    let lyric = line.replace(/\[[^\]]+\]/g, "");
+    pdf.text(lyric, 10, y);
+    y += 8;
+
+    if (y > 270) {
+      pdf.addPage();
+      y = 20;
+    }
+  }
+
   pdf.save((document.getElementById("title").textContent || "Canzone") + ".pdf");
 }
 
 
-// start
-loadSong();
-</script>
-
-</body>
-</html>
-
-
+// =======================================
 // START
+// =======================================
 loadSong();
 </script>
 
 </body>
 </html>
+
