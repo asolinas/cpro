@@ -7,7 +7,7 @@
 <!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<!-- PDF generator -->
+<!-- jsPDF -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
@@ -26,7 +26,7 @@ body {
   background: #fafafa;
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: 100;
 }
 
 .toolbar-btn img {
@@ -46,7 +46,7 @@ body {
 
 .chord-line {
   font-weight: bold;
-  color: #333;
+  color: #000;
 }
 
 .text-line {
@@ -57,7 +57,7 @@ body {
 
 <body>
 
-<!-- ================ TOOLBAR ================ -->
+<!-- TOOLBAR -->
 <div id="toolbar">
   <button class="toolbar-btn" onclick="transpose(-1)"><img src="assets/icons/transpose_minus.png"></button>
   <button class="toolbar-btn" onclick="transpose(1)"><img src="assets/icons/transpose_plus.png"></button>
@@ -89,7 +89,7 @@ let originalText = "";
 let notation = "EN"; // EN or IT
 
 // =======================================
-// SCALE & MAPS
+// NOTES + MAPS
 // =======================================
 const NOTES_EN = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
 const NOTES_IT = ["DO","DO#","RE","RE#","MI","FA","FA#","SOL","SOL#","LA","LA#","SI"];
@@ -97,26 +97,24 @@ const NOTES_IT = ["DO","DO#","RE","RE#","MI","FA","FA#","SOL","SOL#","LA","LA#",
 const MAP_EN_IT = Object.fromEntries(NOTES_EN.map((n,i)=>[n, NOTES_IT[i]]));
 const MAP_IT_EN = Object.fromEntries(NOTES_IT.map((n,i)=>[n, NOTES_EN[i]]));
 
-
 // =======================================
-// CLEAN TAGS
+// CLEAN TAGS BUT KEEP METADATA
 // =======================================
 function cleanTags(text) {
-  return text.replace(/\{[^}]+\}/g, "");
+  return text.replace(/\{(?!title:|subtitle:|st:)[^}]+\}/gi, "");
 }
 
-
 // =======================================
-// PARSE METADATA (ROBUST v3)
+// METADATA PARSER FIX V4
 // =======================================
 function parseMetadata(text) {
-  let title = "";
-  let subtitle = "";
+  let title = "", subtitle = "";
 
   const lines = text.split("\n");
 
   for (let raw of lines) {
-    let line = raw.trim();
+    const line = raw.trim().replace(/^\uFEFF/, "").replace(/\u200B/g, "");
+
     let m;
 
     // Title / t
@@ -128,11 +126,11 @@ function parseMetadata(text) {
     if (m) { subtitle = m[2].trim(); continue; }
 
     // Title:
-    m = line.match(/^title\s*:\s*(.*)$/i);
+    m = line.match(/^[\uFEFF\s]*title\s*:\s*(.*)$/i);
     if (m) { title = m[1].trim(); continue; }
 
     // Subtitle:
-    m = line.match(/^subtitle\s*:\s*(.*)$/i);
+    m = line.match(/^[\uFEFF\s]*subtitle\s*:\s*(.*)$/i);
     if (m) { subtitle = m[1].trim(); continue; }
   }
 
@@ -142,9 +140,8 @@ function parseMetadata(text) {
   return { title, subtitle };
 }
 
-
 // =======================================
-// CHORD PARSER (robust)
+// CHORD PARSER
 // =======================================
 function parseChord(chord) {
   const slash = chord.split("/");
@@ -162,16 +159,14 @@ function parseChord(chord) {
   return { root, suffix, bass };
 }
 
-
 // =======================================
-// TRANSPOSE LOGIC
+// TRANSPOSE FUNCTION
 // =======================================
 function transposeChord(chord, steps, useItalian) {
   const {root, suffix, bass} = parseChord(chord);
   if (!root) return chord;
 
   const EN = NOTES_EN;
-
   const rootEN = useItalian ? MAP_IT_EN[root] : root;
   const idx = EN.indexOf(rootEN);
   if (idx < 0) return chord;
@@ -185,7 +180,6 @@ function transposeChord(chord, steps, useItalian) {
   return newBass ? newRoot + suffix + "/" + newBass : newRoot + suffix;
 }
 
-
 function transpose(steps) {
   const useItalian = notation === "IT";
 
@@ -196,9 +190,8 @@ function transpose(steps) {
   renderSong(originalText);
 }
 
-
 // =======================================
-// NOTATION TOGGLE (robust)
+// NOTATION TOGGLE
 // =======================================
 function toggleNotation() {
   const toIT = notation === "EN";
@@ -218,7 +211,6 @@ function toggleNotation() {
   renderSong(originalText);
 }
 
-
 // =======================================
 // LOAD SONG
 // =======================================
@@ -226,20 +218,19 @@ async function loadSong() {
   const {data, error} = await supabaseClient.storage.from(BUCKET).download(filename);
   if (error) return alert("Errore caricamento file: "+error.message);
 
-  const txt = await data.text();
-  originalText = cleanTags(txt);
+  let txt = await data.text();
+  txt = txt.replace(/^\uFEFF/, "").replace(/\u200B/g, "");
 
+  parseMetadata(txt);
+
+  originalText = cleanTags(txt);
   renderSong(originalText);
 }
 
-
 // =======================================
-// RENDER SONG (chords above)
+// RENDER SONG WITH CHORDS ABOVE
 // =======================================
 function renderSong(text) {
-
-  parseMetadata(text);
-
   const container = document.getElementById("content");
   container.innerHTML = "";
 
@@ -279,7 +270,6 @@ function renderSong(text) {
   }
 }
 
-
 // =======================================
 // FONT RESIZE
 // =======================================
@@ -290,9 +280,8 @@ function resize(n) {
   });
 }
 
-
 // =======================================
-// PDF EXPORT (sync with view)
+// PDF EXPORT
 // =======================================
 async function exportPDF() {
   const { jsPDF } = window.jspdf;
@@ -338,7 +327,6 @@ async function exportPDF() {
 
   pdf.save((document.getElementById("title").textContent || "Canzone") + ".pdf");
 }
-
 
 // =======================================
 // INIT

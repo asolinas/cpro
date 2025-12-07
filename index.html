@@ -13,10 +13,6 @@ body {
   background: #ffffff;
 }
 
-h1 {
-  margin-bottom: 5px;
-}
-
 #search {
   padding: 10px;
   width: 320px;
@@ -24,20 +20,6 @@ h1 {
   margin: 20px 0;
   border-radius: 8px;
   border: 1px solid #bbb;
-}
-
-#uploadForm {
-  margin-top: 10px;
-  margin-bottom: 30px;
-}
-
-button {
-  padding: 8px 14px;
-  background: #444;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
 }
 
 .song-card {
@@ -51,11 +33,6 @@ button {
   align-items: center;
 }
 
-.song-info {
-  display: flex;
-  flex-direction: column;
-}
-
 .song-title {
   font-size: 20px;
   font-weight: bold;
@@ -66,16 +43,10 @@ button {
   color: #666;
 }
 
-.actions {
-  display: flex;
-  gap: 10px;
-}
-
 .actions img {
   width: 28px;
   cursor: pointer;
 }
-
 </style>
 </head>
 
@@ -101,125 +72,105 @@ const SUPABASE_URL = "https://xqrhpgrznrmewtgxxngu.supabase.co";
 const SUPABASE_ANON_KEY =
 "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxcmhwZ3J6bnJtZXd0Z3h4bmd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwMjcyNzUsImV4cCI6MjA4MDYwMzI3NX0.jQNuHTWj4bu4Ji_2ALFzB9Tulf_tM9A1tXBEUVzuaKc";
 
-const BUCKET = "files";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const BUCKET = "files";
 
 let songs = [];
 
-
 // =======================================
-// REMOVE TAGS {font}, {color} etc.
+// REMOVE TAGS BUT KEEP METADATA
 // =======================================
 function cleanTags(text) {
-  return text.replace(/\{[^}]+\}/g, "");
+  return text.replace(/\{(?!title:|subtitle:|st:)[^}]+\}/gi, "");
 }
 
-
 // =======================================
-// PARSE TITLE + SUBTITLE (Title:, Subtitle:, {st:})
+// METADATA PARSER FIX V4
 // =======================================
 function parseMetadata(text) {
   let title = "", subtitle = "";
 
-  const patterns = [
-    { regex: /^Title:\s*(.*)$/mi, target: "title" },
-    { regex: /^\{title:\s*(.*?)\}$/mi, target: "title" },
+  const lines = text.split("\n");
 
-    { regex: /^Subtitle:\s*(.*)$/mi, target: "subtitle" },
-    { regex: /^\{subtitle:\s*(.*?)\}$/mi, target: "subtitle" },
-    { regex: /^\{st:\s*(.*?)\}$/mi, target: "subtitle" }
-  ];
+  for (let raw of lines) {
+    const line = raw.trim().replace(/^\uFEFF/, "").replace(/\u200B/g, "");
 
-  for (let p of patterns) {
-    const m = text.match(p.regex);
-    if (m) {
-      if (p.target === "title") title = m[1].trim();
-      if (p.target === "subtitle") subtitle = m[1].trim();
-    }
+    let m;
+
+    m = line.match(/^\{?\s*(title|t)\s*:\s*(.*?)\s*\}?$/i);
+    if (m) { title = m[2].trim(); continue; }
+
+    m = line.match(/^\{?\s*(subtitle|sub|st)\s*:\s*(.*?)\s*\}?$/i);
+    if (m) { subtitle = m[2].trim(); continue; }
+
+    m = line.match(/^[\uFEFF\s]*title\s*:\s*(.*)$/i);
+    if (m) { title = m[1].trim(); continue; }
+
+    m = line.match(/^[\uFEFF\s]*subtitle\s*:\s*(.*)$/i);
+    if (m) { subtitle = m[1].trim(); continue; }
   }
 
   return { title, subtitle };
 }
 
-
 // =======================================
-// UPLOAD FILE
+// UPLOAD
 // =======================================
 async function uploadFile(evt) {
   evt.preventDefault();
-
-  const fileEl = document.getElementById("fileInput");
-  const file = fileEl.files[0];
+  const file = document.getElementById("fileInput").files[0];
   if (!file) return;
 
-  const { error } = await supabaseClient
-    .storage
-    .from(BUCKET)
-    .upload(file.name, file, { upsert: true });
+  const { error } = await supabaseClient.storage.from(BUCKET).upload(file.name, file, { upsert: true });
+  if (error) return alert("Errore caricamento: " + error.message);
 
-  if (error) {
-    alert("Errore caricamento: " + error.message);
-    return;
-  }
-
-  fileEl.value = "";
-  await loadList();
+  loadList();
 }
 
-
 // =======================================
-// DELETE FILE
+// DELETE
 // =======================================
 async function deleteFile(name) {
-  if (!confirm(`Vuoi davvero eliminare "${name}"?`)) return;
-
+  if (!confirm(`Eliminare "${name}"?`)) return;
   const { error } = await supabaseClient.storage.from(BUCKET).remove([name]);
-  if (error) return alert("Errore eliminazione: " + error.message);
+  if (error) return alert("Errore eliminazione");
 
   songs = songs.filter(s => s.filename !== name);
   renderList();
 }
 
-
 // =======================================
-// LOAD LIST OF FILES
+// LOAD FILES & PARSE METADATA
 // =======================================
 async function loadList() {
   const { data, error } = await supabaseClient.storage.from(BUCKET).list("", { limit: 500 });
-
-  if (error) {
-    alert("Errore lista file: " + error.message);
-    return;
-  }
+  if (error) return alert("Errore lista");
 
   songs = [];
 
   for (let f of data) {
+    const fileObj = await supabaseClient.storage.from(BUCKET).download(f.name);
+    if (fileObj.error) continue;
 
-    const { data: fileData, error: dErr } =
-      await supabaseClient.storage.from(BUCKET).download(f.name);
+    let raw = await fileObj.data.text();
+    raw = raw.replace(/^\uFEFF/, "").replace(/\u200B/g, "");
 
-    if (dErr) continue;
-
-    const txt = cleanTags(await fileData.text());
-    const meta = parseMetadata(txt);
+    const metadata = parseMetadata(raw);
+    const cleaned = cleanTags(raw);
 
     songs.push({
       filename: f.name,
-      title: meta.title || f.name.replace(/\.[^.]+$/, ""),
-      subtitle: meta.subtitle || ""
+      title: metadata.title || f.name.replace(/\.[^.]+$/, ""),
+      subtitle: metadata.subtitle || ""
     });
   }
 
-  // Oridna alfabeticamente per TITOLO
   songs.sort((a, b) => a.title.localeCompare(b.title));
-
   renderList();
 }
 
-
 // =======================================
-// RENDER LIST + SEARCH
+// RENDER LIST
 // =======================================
 function renderList() {
   const q = document.getElementById("search").value.toLowerCase();
@@ -235,29 +186,22 @@ function renderList() {
     .forEach(s => {
       const div = document.createElement("div");
       div.className = "song-card";
-
       div.innerHTML = `
-        <div class="song-info">
+        <div>
           <div class="song-title">${s.title}</div>
           <div class="song-subtitle">${s.subtitle}</div>
         </div>
-
         <div class="actions">
           <a href="viewer.html?file=${encodeURIComponent(s.filename)}">
-            <img src="assets/icons/open.png" title="Apri">
+            <img src="assets/icons/open.png">
           </a>
-          <img src="assets/icons/delete.png" onclick="deleteFile('${s.filename}')" title="Elimina">
+          <img src="assets/icons/delete.png" onclick="deleteFile('${s.filename}')">
         </div>
       `;
-
       list.appendChild(div);
     });
 }
 
-
-// =======================================
-// INIT
-// =======================================
 loadList();
 </script>
 
