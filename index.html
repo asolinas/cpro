@@ -13,18 +13,38 @@ body {
   padding: 20px;
 }
 
+h1 {
+  margin-bottom: 5px;
+}
+
 #search {
   padding: 10px;
-  width: 300px;
+  width: 320px;
   font-size: 16px;
-  margin-bottom: 20px;
+  margin: 20px 0;
+  border-radius: 8px;
+  border: 1px solid #bbb;
+}
+
+#uploadForm {
+  margin-top: 10px;
+  margin-bottom: 30px;
+}
+
+button {
+  padding: 8px 14px;
+  background: #444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
 }
 
 .song-card {
-  padding: 12px;
-  border: 1px solid #ccc;
+  padding: 14px;
+  border: 1px solid #ddd;
   margin-bottom: 10px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fafafa;
   display: flex;
   justify-content: space-between;
@@ -43,7 +63,7 @@ body {
 
 .song-subtitle {
   font-size: 14px;
-  color: #555;
+  color: #666;
 }
 
 .actions {
@@ -62,14 +82,21 @@ body {
 
 <h1>Canzoniere</h1>
 
+<h2>Carica nuovo file</h2>
+
+<form id="uploadForm" onsubmit="uploadFile(event)">
+  <input type="file" id="fileInput" accept=".cho,.chordpro,.txt" required />
+  <button type="submit">Carica</button>
+</form>
+
 <input type="text" id="search" placeholder="Cerca per titolo, autore o nome file…" oninput="renderList()" />
 
 <div id="list"></div>
 
 <script>
-// ======================
+// ================================
 // SUPABASE CONFIG
-// ======================
+// ================================
 const SUPABASE_URL = "https://xqrhpgrznrmewtgxxngu.supabase.co";
 const SUPABASE_ANON_KEY =
 "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxcmhwZ3J6bnJtZXd0Z3h4bmd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwMjcyNzUsImV4cCI6MjA4MDYwMzI3NX0.jQNuHTWj4bu4Ji_2ALFzB9Tulf_tM9A1tXBEUVzuaKc";
@@ -80,123 +107,152 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let songs = [];
 
 
-// ======================
+// ================================
 // CLEAN TAGS
-// ======================
+// ================================
 function cleanTags(text) {
-    return text.replace(/\{(font|color|chordChartSize|playtime|chorusindent|chordspace|linespace|transpositionLevel|EditorBack|Background|Highlight)[^}]*\}/gi, "");
+  return text.replace(/\{(font|color|chordChartSize|playtime|chorusindent|chordspace|linespace|transpositionLevel|EditorBack|Background|Highlight)[^}]*\}/gi, "");
 }
 
 
-// ======================
-// PARSE METADATA
-// ======================
+// ================================
+// PARSE METADATA (title, subtitle)
+// ================================
 function parseMetadata(text) {
-    let title = "";
-    let subtitle = "";
+  let title = "";
+  let subtitle = "";
 
-    const patterns = [
-        { regex: /^Title:\s*(.*)$/mi, target: "title" },
-        { regex: /^\{title:\s*(.*?)\}$/mi, target: "title" },
-        { regex: /^Subtitle:\s*(.*)$/mi, target: "subtitle" },
-        { regex: /^\{subtitle:\s*(.*?)\}$/mi, target: "subtitle" },
-        { regex: /^\{st:\s*(.*?)\}$/mi, target: "subtitle" }
-    ];
+  const patterns = [
+    { regex: /^Title:\s*(.*)$/mi, target: "title" },
+    { regex: /^\{title:\s*(.*?)\}$/mi, target: "title" },
 
-    for (let p of patterns) {
-        const match = text.match(p.regex);
-        if (match) {
-            if (p.target === "title") title = match[1].trim();
-            if (p.target === "subtitle") subtitle = match[1].trim();
-        }
+    { regex: /^Subtitle:\s*(.*)$/mi, target: "subtitle" },
+    { regex: /^\{subtitle:\s*(.*?)\}$/mi, target: "subtitle" },
+    { regex: /^\{st:\s*(.*?)\}$/mi, target: "subtitle" }
+  ];
+
+  for (let p of patterns) {
+    const m = text.match(p.regex);
+    if (m) {
+      if (p.target === "title") title = m[1].trim();
+      if (p.target === "subtitle") subtitle = m[1].trim();
     }
+  }
 
-    return { title, subtitle };
+  return { title, subtitle };
 }
 
 
-// ======================
+// ================================
+// UPLOAD FILE
+// ================================
+async function uploadFile(evt) {
+  evt.preventDefault();
+  const fileEl = document.getElementById("fileInput");
+  const file = fileEl.files[0];
+
+  if (!file) return;
+
+  const { error } = await supabaseClient
+    .storage
+    .from(BUCKET)
+    .upload(file.name, file, { upsert: true });
+
+  if (error) {
+    alert("Errore caricamento: " + error.message);
+    return;
+  }
+
+  fileEl.value = "";
+  await loadList();
+}
+
+
+
+// ================================
 // DELETE FILE
-// ======================
+// ================================
 async function deleteFile(name) {
-    if (!confirm(`Vuoi davvero eliminare "${name}"?`)) return;
+  if (!confirm(`Vuoi davvero eliminare "${name}"?`)) return;
 
-    const { error } = await supabaseClient.storage.from(BUCKET).remove([name]);
+  const { error } = await supabaseClient.storage.from(BUCKET).remove([name]);
 
-    if (error) return alert("Errore eliminazione: " + error.message);
+  if (error) return alert("Errore eliminazione: " + error.message);
 
-    songs = songs.filter(s => s.filename !== name);
-    renderList();
+  songs = songs.filter(s => s.filename !== name);
+  renderList();
 }
 
 
-// ======================
-// LOAD LIST
-// ======================
+
+// ================================
+// LOAD LIST OF FILES
+// ================================
 async function loadList() {
-    const { data, error } = await supabaseClient.storage.from(BUCKET).list("", { limit: 200 });
+  const { data, error } = await supabaseClient.storage.from(BUCKET).list("", { limit: 300 });
 
-    if (error) return alert("Errore: " + error.message);
+  if (error) return alert("Errore lista file: " + error.message);
 
-    // Per ogni file scarico solo i metadata
-    songs = [];
+  songs = [];
 
-    for (let f of data) {
-        const { data: file, error: err2 } = await supabaseClient.storage.from(BUCKET).download(f.name);
-        if (err2) continue;
+  for (let f of data) {
 
-        const txt = cleanTags(await file.text());
-        const meta = parseMetadata(txt);
+    const { data: fileData, error: dErr } = await supabaseClient.storage.from(BUCKET).download(f.name);
+    if (dErr) continue;
 
-        songs.push({
-            filename: f.name,
-            title: meta.title || f.name.replace(".cho", ""),
-            subtitle: meta.subtitle || ""
-        });
-    }
+    const txt = cleanTags(await fileData.text());
+    const meta = parseMetadata(txt);
 
-    // ORDINAMENTO (scelto da te) → per TITOLO
-    songs.sort((a, b) => a.title.localeCompare(b.title));
+    songs.push({
+      filename: f.name,
+      title: meta.title || f.name.replace(".cho", ""),
+      subtitle: meta.subtitle || ""
+    });
+  }
 
-    renderList();
+  // ORDINAMENTO per TITOLO
+  songs.sort((a, b) => a.title.localeCompare(b.title));
+
+  renderList();
 }
 
 
-// ======================
-// RENDER LIST
-// ======================
+
+// ================================
+// RENDER LIST + SEARCH
+// ================================
 function renderList() {
-    const q = document.getElementById("search").value.toLowerCase();
-    const list = document.getElementById("list");
-    list.innerHTML = "";
+  const q = document.getElementById("search").value.toLowerCase();
+  const list = document.getElementById("list");
+  list.innerHTML = "";
 
-    songs
-        .filter(s =>
-            s.title.toLowerCase().includes(q) ||
-            s.subtitle.toLowerCase().includes(q) ||
-            s.filename.toLowerCase().includes(q)
-        )
-        .forEach(s => {
+  songs
+    .filter(s =>
+      s.title.toLowerCase().includes(q) ||
+      s.subtitle.toLowerCase().includes(q) ||
+      s.filename.toLowerCase().includes(q)
+    )
+    .forEach(s => {
 
-            const div = document.createElement("div");
-            div.className = "song-card";
+      const div = document.createElement("div");
+      div.className = "song-card";
 
-            div.innerHTML = `
-                <div class="song-info">
-                    <div class="song-title">${s.title}</div>
-                    <div class="song-subtitle">${s.subtitle}</div>
-                </div>
+      div.innerHTML = `
+        <div class="song-info">
+          <div class="song-title">${s.title}</div>
+          <div class="song-subtitle">${s.subtitle}</div>
+        </div>
 
-                <div class="actions">
-                    <a href="viewer.html?file=${encodeURIComponent(s.filename)}">
-                        <img src="assets/icons/open.png" title="Apri">
-                    </a>
-                    <img src="assets/icons/delete.png" onclick="deleteFile('${s.filename}')" title="Elimina">
-                </div>
-            `;
+        <div class="actions">
+          <a href="viewer.html?file=${encodeURIComponent(s.filename)}">
+            <img src="assets/icons/open.png" title="Apri">
+          </a>
+          <img src="assets/icons/delete.png" onclick="deleteFile('${s.filename}')" title="Elimina">
+        </div>
+      `;
 
-            list.appendChild(div);
-        });
+      list.appendChild(div);
+    });
 }
 
 
@@ -206,4 +262,5 @@ loadList();
 
 </body>
 </html>
+
 
