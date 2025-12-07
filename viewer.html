@@ -4,52 +4,71 @@
 <meta charset="UTF-8" />
 <title>Viewer Canzoniere</title>
 
+<!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="styles.css" />
+
+<!-- PDF generator -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
-#content { padding: 20px; }
-.song-line { margin-bottom: 10px; white-space: pre; font-family: monospace; }
-.chord-line { font-weight: bold; color: #444; }
-.text-line { margin-top: -4px; }
-#toolbar { display: flex; gap: 10px; padding: 10px; border-bottom: 1px solid #ccc; }
-.toolbar-btn img { width: 32px; cursor: pointer; }
-</style>
+body {
+  font-family: sans-serif;
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+}
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+#toolbar {
+  display: flex;
+  gap: 12px;
+  padding: 10px 15px;
+  border-bottom: 1px solid #ddd;
+  background: #fafafa;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.toolbar-btn img {
+  width: 32px;
+  cursor: pointer;
+}
+
+#content {
+  padding: 20px;
+}
+
+.song-line {
+  margin-bottom: 14px;
+  white-space: pre;
+  font-family: monospace;
+}
+
+.chord-line {
+  font-weight: bold;
+  color: #333;
+}
+
+.text-line {
+  margin-top: -4px;
+}
+</style>
 </head>
 
 <body>
 
-<!-- TOOLBAR -->
+<!-- ================ TOOLBAR ================ -->
 <div id="toolbar">
-  <button class="toolbar-btn" onclick="transpose(-1)" title="Trasponi -">
-    <img src="assets/icons/transpose_minus.png">
-  </button>
-
-  <button class="toolbar-btn" onclick="transpose(1)" title="Trasponi +">
-    <img src="assets/icons/transpose_plus.png">
-  </button>
-
-  <button class="toolbar-btn" onclick="resize(-1)" title="Font -">
-    <img src="assets/icons/font_minus.png">
-  </button>
-
-  <button class="toolbar-btn" onclick="resize(1)" title="Font +">
-    <img src="assets/icons/font_plus.png">
-  </button>
-
-  <button class="toolbar-btn" onclick="toggleNotation()" title="EN ⇄ ITA">
-    <img src="assets/icons/notation.png">
-  </button>
-
-  <button class="toolbar-btn" onclick="exportPDF()" title="Esporta PDF">
-    <img src="assets/icons/pdf.png">
-  </button>
+  <button class="toolbar-btn" onclick="transpose(-1)"><img src="assets/icons/transpose_minus.png"></button>
+  <button class="toolbar-btn" onclick="transpose(1)"><img src="assets/icons/transpose_plus.png"></button>
+  <button class="toolbar-btn" onclick="resize(-1)"><img src="assets/icons/font_minus.png"></button>
+  <button class="toolbar-btn" onclick="resize(1)"><img src="assets/icons/font_plus.png"></button>
+  <button class="toolbar-btn" onclick="toggleNotation()"><img src="assets/icons/notation.png"></button>
+  <button class="toolbar-btn" onclick="exportPDF()"><img src="assets/icons/pdf.png"></button>
 </div>
 
-<h1 id="title"></h1>
-<h2 id="subtitle"></h2>
+<h1 id="title" style="padding-left:20px;"></h1>
+<h2 id="subtitle" style="padding-left:20px; color:#666;"></h2>
 
 <div id="content"></div>
 
@@ -67,44 +86,125 @@ const BUCKET = "files";
 const filename = new URLSearchParams(location.search).get("file");
 
 let originalText = "";
-let notation = "EN";
+let notation = "EN"; // EN or IT
+
+// =======================================
+// SCALE & MAPS
+// =======================================
+const NOTES_EN = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const NOTES_IT = ["DO","DO#","RE","RE#","MI","FA","FA#","SOL","SOL#","LA","LA#","SI"];
+
+const MAP_EN_IT = Object.fromEntries(NOTES_EN.map((n,i)=>[n, NOTES_IT[i]]));
+const MAP_IT_EN = Object.fromEntries(NOTES_IT.map((n,i)=>[n, NOTES_EN[i]]));
 
 
 // =======================================
-// CLEAN TAGS ChordPro (font, color, etc.)
+// CLEAN TAGS
 // =======================================
 function cleanTags(text) {
-  return text.replace(/\{(font|color|chordChartSize|playtime|chorusindent|chordspace|linespace|transpositionLevel|EditorBack|Background|Highlight)[^}]*\}/gi, "");
+  return text.replace(/\{[^}]+\}/g, "");
 }
 
 
 // =======================================
-// PARSE METADATA (title, subtitle)
+// PARSE METADATA
 // =======================================
 function parseMetadata(text) {
-  let title = "";
-  let subtitle = "";
+  let title = "", subtitle = "";
 
   const patterns = [
-    { regex: /^Title:\s*(.*)$/mi, target: "title" },
-    { regex: /^\{title:\s*(.*?)\}$/mi, target: "title" },
-    { regex: /^Subtitle:\s*(.*)$/mi, target: "subtitle" },
-    { regex: /^\{subtitle:\s*(.*?)\}$/mi, target: "subtitle" },
-    { regex: /^\{st:\s*(.*?)\}$/mi, target: "subtitle" },
+    {regex: /^Title:\s*(.*)$/mi, target:"title"},
+    {regex: /^\{title:\s*(.*?)\}$/mi, target:"title"},
+
+    {regex: /^Subtitle:\s*(.*)$/mi, target:"subtitle"},
+    {regex: /^\{subtitle:\s*(.*?)\}$/mi, target:"subtitle"},
+    {regex: /^\{st:\s*(.*?)\}$/mi, target:"subtitle"},
   ];
 
-  for (const p of patterns) {
+  for (let p of patterns) {
     const m = text.match(p.regex);
     if (m) {
-      if (p.target === "title") title = m[1].trim();
-      if (p.target === "subtitle") subtitle = m[1].trim();
+      if (p.target==="title") title = m[1].trim();
+      if (p.target==="subtitle") subtitle = m[1].trim();
     }
   }
 
   document.getElementById("title").textContent = title;
   document.getElementById("subtitle").textContent = subtitle;
+}
 
-  return { title, subtitle };
+
+// =======================================
+// CHORD PARSER
+// =======================================
+function parseChord(chord) {
+  const slash = chord.split("/");
+  const base = slash[0];
+  const bass = slash[1];
+
+  const rootMatch = base.match(/^(DO#?|RE#?|MI|FA#?|SOL#?|LA#?|SI|C#?|D#?|F#?|G#?|A#?|[CDEFGAB])/i);
+  if (!rootMatch) return {root:null, suffix:base, bass};
+
+  const root = rootMatch[0].toUpperCase();
+  const suffix = base.slice(root.length);
+
+  return {root, suffix, bass};
+}
+
+
+// =======================================
+// TRANSPOSE LOGIC
+// =======================================
+function transposeChord(chord, steps, useItalian) {
+  const {root, suffix, bass} = parseChord(chord);
+  if (!root) return chord;
+
+  const EN = NOTES_EN;
+
+  const rootEN = useItalian ? MAP_IT_EN[root] : root;
+  const idx = EN.indexOf(rootEN);
+  if (idx < 0) return chord;
+
+  const newRootEN = EN[(idx + steps + 12) % 12];
+  const newRoot = useItalian ? MAP_EN_IT[newRootEN] : newRootEN;
+
+  let newBass = bass;
+  if (bass) newBass = transposeChord(bass, steps, useItalian);
+
+  return newBass ? newRoot + suffix + "/" + newBass : newRoot + suffix;
+}
+
+
+function transpose(steps) {
+  const useItalian = notation === "IT";
+
+  originalText = originalText.replace(/\[([^\]]+)\]/g, (_, chord) => {
+    return "[" + transposeChord(chord, steps, useItalian) + "]";
+  });
+
+  renderSong(originalText);
+}
+
+
+// =======================================
+// NOTATION TOGGLE
+// =======================================
+function toggleNotation() {
+  const toIT = (notation === "EN");
+  notation = toIT ? "IT" : "EN";
+
+  originalText = originalText.replace(/\[([^\]]+)\]/g, (_, chord) => {
+    const {root, suffix, bass} = parseChord(chord);
+    if (!root) return "["+chord+"]";
+
+    const newRoot = toIT ? MAP_EN_IT[root] : MAP_IT_EN[root];
+    let newBass = bass;
+    if (bass) newBass = toIT ? MAP_EN_IT[bass] : MAP_IT_EN[bass];
+
+    return "[" + (newBass ? newRoot + suffix + "/" + newBass : newRoot + suffix) + "]";
+  });
+
+  renderSong(originalText);
 }
 
 
@@ -112,8 +212,8 @@ function parseMetadata(text) {
 // LOAD SONG
 // =======================================
 async function loadSong() {
-  const { data, error } = await supabaseClient.storage.from(BUCKET).download(filename);
-  if (error) return alert("Errore caricamento file: " + error.message);
+  const {data, error} = await supabaseClient.storage.from(BUCKET).download(filename);
+  if (error) return alert("Errore caricamento file: "+error.message);
 
   const txt = await data.text();
   originalText = cleanTags(txt);
@@ -123,9 +223,10 @@ async function loadSong() {
 
 
 // =======================================
-// RENDER SONG (accordi sopra il testo)
+// RENDER SONG (with chords above)
 // =======================================
 function renderSong(text) {
+
   parseMetadata(text);
 
   const container = document.getElementById("content");
@@ -135,15 +236,8 @@ function renderSong(text) {
 
   for (let line of lines) {
 
-    // ignora tag residui
     if (line.match(/^\{.*?\}$/)) continue;
-
-    // ignora meta
-    if (line.match(/^Title:/i) ||
-        line.match(/^Subtitle:/i) ||
-        line.match(/^\{subtitle:/i) ||
-        line.match(/^\{title:/i) ||
-        line.match(/^\{st:/i)) continue;
+    if (line.match(/^Title:/i) || line.match(/^Subtitle:/i)) continue;
 
     const chords = [...line.matchAll(/\[([^\]]+)\]/g)];
     const textOnly = line.replace(/\[[^\]]+\]/g, "");
@@ -177,106 +271,56 @@ function renderSong(text) {
 
 
 // =======================================
-// TRANSPOSE ACCUMULATO
-// =======================================
-function transpose(n) {
-
-  function shift(note) {
-    const scale = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-    let root = note.match(/[A-G]#?/);
-    if (!root) return note;
-
-    let idx = scale.indexOf(root[0]);
-    if (idx < 0) return note;
-
-    return note.replace(root[0], scale[(idx + n + 12) % 12]);
-  }
-
-  originalText = originalText.replace(/\[([^\]]+)\]/g,
-    (m, chord) => "[" + chord.replace(/[A-G]#?/g, c => shift(c)) + "]"
-  );
-
-  renderSong(originalText);
-}
-
-
-// =======================================
-// EN ⇄ ITA (MAIUSCOLO)
-// =======================================
-const EN_TO_IT = {
-  "C":"DO","C#":"DO#","D":"RE","D#":"RE#","E":"MI","F":"FA","F#":"FA#",
-  "G":"SOL","G#":"SOL#","A":"LA","A#":"LA#","B":"SI"
-};
-const IT_TO_EN = {
-  "DO":"C","DO#":"C#","RE":"D","RE#":"D#","MI":"E","FA":"F","FA#":"F#",
-  "SOL":"G","SOL#":"G#","LA":"A","LA#":"A#","SI":"B"
-};
-
-function toggleNotation() {
-  notation = notation === "EN" ? "IT" : "EN";
-  const map = notation === "EN" ? IT_TO_EN : EN_TO_IT;
-
-  originalText = originalText.replace(/\[([^\]]+)\]/g, (m, chord) =>
-    "[" + chord.replace(
-      /(DO#?|RE#?|MI|FA#?|SOL#?|LA#?|SI|C#?|D#?|F#?|G#?|A#?|[CDEFGAB])/g,
-      c => map[c] || c
-    ) + "]"
-  );
-
-  renderSong(originalText);
-}
-
-
-// =======================================
 // FONT RESIZE
 // =======================================
 function resize(n) {
   document.querySelectorAll(".text-line, .chord-line").forEach(el => {
-    let size = parseFloat(getComputedStyle(el).fontSize);
+    const size = parseFloat(getComputedStyle(el).fontSize);
     el.style.fontSize = (size + n) + "px";
   });
 }
 
 
 // =======================================
-// EXPORT PDF **LEGGERO** (NO TOOLBAR)
+// PDF EXPORT (TRUE VIEW MODE)
 // =======================================
 async function exportPDF() {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF("p", "mm", "a4");
 
   let y = 20;
+  const pageHeight = pdf.internal.pageSize.getHeight();
 
-  // Titolo
   pdf.setFontSize(20);
-  pdf.text(document.getElementById("title").textContent || "", 10, y);
+  pdf.text(document.getElementById("title").textContent, 10, y);
   y += 10;
 
-  // Sottotitolo
   pdf.setFontSize(14);
-  pdf.text(document.getElementById("subtitle").textContent || "", 10, y);
+  pdf.text(document.getElementById("subtitle").textContent, 10, y);
   y += 12;
 
-  // Corpo testo
-  pdf.setFontSize(11);
-  const lines = originalText.split("\n");
+  const lines = document.querySelectorAll(".song-line");
 
-  for (let line of lines) {
+  for (const line of lines) {
 
-    if (line.match(/^\{.*?\}$/)) continue;
-    if (line.match(/^Title:/i) || line.match(/^Subtitle:/i)) continue;
+    const chordEl = line.querySelector(".chord-line");
+    const textEl  = line.querySelector(".text-line");
 
-    if (line.includes("[")) {
-      let chords = line.replace(/[^\]]+\]/g, match => match);
-      pdf.text(chords, 10, y);
-      y += 6;
+    if (chordEl) {
+      const size = parseFloat(getComputedStyle(chordEl).fontSize);
+      pdf.setFontSize(size * 0.75);
+      pdf.text(chordEl.textContent, 10, y);
+      y += size * 0.45;
     }
 
-    let lyric = line.replace(/\[[^\]]+\]/g, "");
-    pdf.text(lyric, 10, y);
-    y += 8;
+    if (textEl) {
+      const size = parseFloat(getComputedStyle(textEl).fontSize);
+      pdf.setFontSize(size * 0.75);
+      pdf.text(textEl.textContent, 10, y);
+      y += size * 0.65;
+    }
 
-    if (y > 270) {
+    if (y > pageHeight - 20) {
       pdf.addPage();
       y = 20;
     }
@@ -287,11 +331,12 @@ async function exportPDF() {
 
 
 // =======================================
-// START
+// INIT
 // =======================================
 loadSong();
 </script>
 
 </body>
 </html>
+
 
